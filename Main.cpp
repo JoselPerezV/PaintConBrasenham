@@ -1,5 +1,8 @@
 ﻿#include <iostream>
-#include <vector>              //necesario para std::vector
+#include <vector>  //necesario para std::vector
+#include "imgui.h"
+#include "imgui_impl_glfw.h"
+#include "imgui_impl_opengl3.h"
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
 
@@ -23,9 +26,13 @@ const char* fragmentShaderSource = "#version 330 core\n"
 "}\0";
 
 
-// se llama cada vez que cambia el tamaño de la ventana
+// Esta función la llama GLFW automáticamente cada vez que cambia el tamaño
+// de la ventana (al arrastrar el borde, maximizar o restaurar)
 void framebuffer_size_callback(GLFWwindow* window, int width, int height)
 {
+    // glViewport le dice a OpenGL en qué parte de la ventana puede dibujar:
+    // desde la esquina inferior izquierda (0, 0) hasta el ancho y alto nuevos.
+    // Como la grilla va de -1 a 1, se estira sola a ese espacio
     glViewport(0, 0, width, height);  // la grilla usa toda la ventana
 }
 
@@ -46,7 +53,23 @@ int main()
         return -1;
     }
     glfwMakeContextCurrent(window);
-    glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
+
+    // Le avisa a GLFW que esa función de arriba es la que debe llamar
+    glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);// cuando cambie el tamaño de la ventana. Solo se registra una vez
+
+    // crea el contexto de ImGui, que guarda todo su estado interno
+    IMGUI_CHECKVERSION();
+    ImGui::CreateContext();
+
+    // estilo oscuro para los paneles
+    ImGui::StyleColorsDark();
+
+    // conecta ImGui con GLFW. El true hace que ImGui reciba el mouse y el teclado
+    ImGui_ImplGlfw_InitForOpenGL(window, true);
+
+    // conecta ImGui con OpenGL. La versión debe coincidir con la de tus shaders
+    ImGui_ImplOpenGL3_Init("#version 330");
+
     gladLoadGL();
 
     // Ajustar viewport al tamaño de la ventana
@@ -108,6 +131,16 @@ int main()
         glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT);
 
+        // avisa a ImGui que empieza un frame nuevo
+        ImGui_ImplOpenGL3_NewFrame();
+        ImGui_ImplGlfw_NewFrame();
+        ImGui::NewFrame();
+
+        // panel de prueba
+        ImGui::Begin("Panel");
+        ImGui::Text("Hola ImGui");
+        ImGui::End();
+
         glUseProgram(shaderProgram);
 
         //Dibujar la grilla en blanco
@@ -116,6 +149,10 @@ int main()
         glDrawArrays(GL_LINES, 0, gridVertices.size() / 2);
 
         glBindVertexArray(0);
+
+        // ImGui dibuja al final para que el panel quede encima de la grilla
+        ImGui::Render();
+        ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 
         glfwSwapBuffers(window);
         glfwPollEvents();
@@ -126,6 +163,11 @@ int main()
     glDeleteBuffers(1, &gridVBO);
     glDeleteProgram(shaderProgram);
     glfwDestroyWindow(window);
+    // libera todo lo que ImGui reservó
+    ImGui_ImplOpenGL3_Shutdown();
+    ImGui_ImplGlfw_Shutdown();
+    ImGui::DestroyContext();
+
     glfwTerminate();
     return 0;
 }
