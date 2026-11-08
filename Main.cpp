@@ -6,6 +6,7 @@
 #include "imgui_impl_opengl3.h"
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
+#include <algorithm>
 
 // Shader de vertices: pasa la posicion tal cual a la pantalla
 const char* vertexShaderSource = "#version 330 core\n"
@@ -194,12 +195,25 @@ int main()
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
 
-        ImGui::Begin("Panel");
-        ImGui::Text("Hola ImGui");
-        ImGui::End();
 
         // Mouse: pinta celdas mientras se mantiene el clic izquierdo
         bool cambio = false;  // true si hay que reconstruir los cuadritos
+
+        ImGui::Begin("Panel");
+
+        // Si se presiona, todas las celdas quedan vacias
+        if (ImGui::Button("Borrar todo"))
+        {
+            std::fill(celdas.begin(), celdas.end(), 0);
+            cambio = true;  // para que se rearmen los cuadritos y desaparezcan
+        }
+
+        ImGui::End();
+
+       
+
+
+      
 
         // No se pinta si el mouse esta sobre el panel de ImGui
         ImGuiIO& io = ImGui::GetIO();
