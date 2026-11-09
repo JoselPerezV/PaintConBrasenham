@@ -93,6 +93,68 @@ std::vector<std::pair<int, int>> bresenhamLine(int x0, int y0, int x1, int y1)
     return puntos;
 }
 
+// Relleno por inundacion: parte de la celda (i, j) y pinta todas las celdas
+// conectadas que sean iguales a ella (vacias, o pintadas del mismo color)
+void rellenar(std::vector<int>& celdas, std::vector<float>& colores, int N, int i, int j, const float color[3])
+{
+    int inicio = j * N + i;
+    int estado = celdas[inicio];
+
+    // Color original de la celda donde se hizo clic
+    float cr = colores[inicio * 3 + 0];
+    float cg = colores[inicio * 3 + 1];
+    float cb = colores[inicio * 3 + 2];
+
+    // Si ya esta pintada con el color elegido, no hay nada que hacer
+    if (estado == 1 && cr == color[0] && cg == color[1] && cb == color[2]) return;
+
+    std::vector<bool> visitada(N * N, false);
+    std::vector<std::pair<int, int>> pila;
+
+    pila.push_back({ i, j });
+    visitada[inicio] = true;
+
+    // Mientras queden celdas pendientes: se saca una, se pinta y se revisan sus 4 vecinos
+    while (!pila.empty())
+    {
+        int ci = pila.back().first;
+        int cj = pila.back().second;
+        pila.pop_back();
+
+        int k = cj * N + ci;
+        celdas[k] = 1;
+        colores[k * 3 + 0] = color[0];
+        colores[k * 3 + 1] = color[1];
+        colores[k * 3 + 2] = color[2];
+
+        // Vecinos: derecha, izquierda, arriba y abajo.
+        // No se usan diagonales para que el relleno no se escape por las lineas de Bresenham
+        int di[4] = { 1, -1, 0, 0 };
+        int dj[4] = { 0, 0, 1, -1 };
+
+        for (int d = 0; d < 4; d++)
+        {
+            int ni = ci + di[d];
+            int nj = cj + dj[d];
+
+            // Fuera de la grilla
+            if (ni < 0 || ni >= N || nj < 0 || nj >= N) continue;
+
+            int nk = nj * N + ni;
+
+            // Ya revisada
+            if (visitada[nk]) continue;
+
+            // Solo se extiende por celdas iguales a la inicial
+            if (celdas[nk] != estado) continue;
+            if (estado == 1 && (colores[nk * 3 + 0] != cr || colores[nk * 3 + 1] != cg || colores[nk * 3 + 2] != cb)) continue;
+
+            visitada[nk] = true;
+            pila.push_back({ ni, nj });
+        }
+    }
+}
+
 int main()
 {
     // Ventana y OpenGL
@@ -200,8 +262,8 @@ int main()
     int ultimaI = -1, ultimaJ = -1;
     bool dibujando = false;
 
-    // true = el clic borra celdas, false = el clic las pinta
-    bool borrador = false;
+    // Herramienta activa: 0 = pincel, 1 = borrador, 2 = relleno
+    int herramienta = 0;
 
     // Color con el que se pinta ahora (el que se elige en el panel)
     float colorActual[3] = { 0.3f, 0.5f, 1.0f };
@@ -226,8 +288,10 @@ int main()
         // Selector de color: al elegir uno, las celdas nuevas se pintan con ese color
         ImGui::ColorEdit3("Color", colorActual);
 
-        // Casilla para cambiar entre pintar y borrar
-        ImGui::Checkbox("Borrador", &borrador);
+        // Botones para elegir la herramienta
+        ImGui::RadioButton("Pincel", &herramienta, 0);
+        ImGui::RadioButton("Borrador", &herramienta, 1);
+        ImGui::RadioButton("Relleno", &herramienta, 2);
 
         // Si se presiona, todas las celdas quedan vacias
         if (ImGui::Button("Borrar todo"))
@@ -238,13 +302,13 @@ int main()
 
         ImGui::End();
 
-        // Mouse: pinta o borra celdas mientras se mantiene el clic izquierdo.
+        // Mouse: usa la herramienta elegida mientras se mantiene el clic izquierdo.
         // No hace nada si el mouse esta sobre el panel de ImGui
         ImGuiIO& io = ImGui::GetIO();
         if (!io.WantCaptureMouse && glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS)
         {
-            // Si el borrador esta activo se escribe 0 (vacia), si no 1 (pintada)
-            int valor = borrador ? 0 : 1;
+            // Si la herramienta es el borrador se escribe 0 (vacia), si no 1 (pintada)
+            int valor = (herramienta == 1) ? 0 : 1;
 
             // Marca una celda con el valor y le guarda el color elegido
             auto marcar = [&](int ci, int cj)
@@ -268,7 +332,17 @@ int main()
 
             if (i >= 0 && i < N && j >= 0 && j < N)
             {
-                if (!dibujando)
+                if (herramienta == 2)
+                {
+                    // Relleno: solo actua en el primer instante del clic,
+                    // no se repite mientras mantienes el boton presionado
+                    if (!dibujando)
+                    {
+                        rellenar(celdas, colores, N, i, j, colorActual);
+                        cambio = true;
+                    }
+                }
+                else if (!dibujando)
                 {
                     // Primer clic del trazo: una sola celda
                     marcar(i, j);
@@ -343,11 +417,13 @@ int main()
         // Dibujo: primero la grilla en blanco, luego las celdas con su color encima
         glUseProgram(shaderProgram);
 
+        // Grilla: color fijo blanco
         glUniform1i(usarVerticeLoc, 0);
         glUniform4f(colorLoc, 1.0f, 1.0f, 1.0f, 1.0f);
         glBindVertexArray(gridVAO);
         glDrawArrays(GL_LINES, 0, gridVertices.size() / 2);
 
+        // Celdas: cada una con su color. Se divide entre 5 porque cada vertice tiene 5 numeros
         glUniform1i(usarVerticeLoc, 1);
         glBindVertexArray(celdaVAO);
         glDrawArrays(GL_TRIANGLES, 0, celdaVertices.size() / 5);
