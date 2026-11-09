@@ -183,6 +183,7 @@ int main()
     // Estado del trazo: ultima celda pintada y si el clic sigue presionado
     int ultimaI = -1, ultimaJ = -1;
     bool dibujando = false;
+    bool borrador = false; //true = el clic borra celdas, false = el clic las pinta
 
     // Loop principal
     while (!glfwWindowShouldClose(window))
@@ -207,6 +208,8 @@ int main()
             std::fill(celdas.begin(), celdas.end(), 0);
             cambio = true;  // para que se rearmen los cuadritos y desaparezcan
         }
+        //casilla para cambiar entre borrar y pintar
+        ImGui::Checkbox("Borrador", &borrador);
 
         ImGui::End();
 
@@ -219,13 +222,15 @@ int main()
         ImGuiIO& io = ImGui::GetIO();
         if (!io.WantCaptureMouse && glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS)
         {
+            // Si el borrador esta activo se escribe 0 (vacia), si no 1 (pintada)
+            int valor = borrador ? 0 : 1;
+
             double mx, my;
             glfwGetCursorPos(window, &mx, &my);
 
             int w, h;
             glfwGetWindowSize(window, &w, &h);
 
-            // Posicion del mouse a celda (la y se invierte porque en la ventana crece hacia abajo)
             int i = (int)(mx / w * N);
             int j = (int)((h - my) / h * N);
 
@@ -233,17 +238,15 @@ int main()
             {
                 if (!dibujando)
                 {
-                    // Primer clic del trazo: una sola celda
-                    celdas[j * N + i] = 1;
+                    celdas[j * N + i] = valor;
                     cambio = true;
                 }
                 else if (i != ultimaI || j != ultimaJ)
                 {
-                    // El mouse cambio de celda: Bresenham rellena el camino desde la anterior
                     std::vector<std::pair<int, int>> camino = bresenhamLine(ultimaI, ultimaJ, i, j);
                     for (auto& c : camino)
                     {
-                        celdas[c.second * N + c.first] = 1;
+                        celdas[c.second * N + c.first] = valor;
                     }
                     cambio = true;
                 }
@@ -255,10 +258,8 @@ int main()
         }
         else
         {
-            // Sin clic, el trazo termino
             dibujando = false;
         }
-
         // Si se pinto algo, se rearman los cuadritos y se suben a la GPU
         if (cambio)
         {
