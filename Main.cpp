@@ -155,6 +155,30 @@ void rellenar(std::vector<int>& celdas, std::vector<float>& colores, int N, int 
     }
 }
 
+// Ajusta la celda final de una linea segun la orientacion elegida:
+// 0 = libre, 1 = horizontal, 2 = vertical, 3 = diagonal de 45 grados
+void ajustarOrientacion(int inicioI, int inicioJ, int& finI, int& finJ, int orientacion)
+{
+    int dx = finI - inicioI;
+    int dy = finJ - inicioJ;
+
+    if (orientacion == 1)
+    {
+        finJ = inicioJ;
+    }
+    else if (orientacion == 2)
+    {
+        finI = inicioI;
+    }
+    else if (orientacion == 3)
+    {
+        // Se usa la menor de las dos distancias para que quede justo a 45 grados
+        int d = std::min(std::abs(dx), std::abs(dy));
+        finI = inicioI + (dx < 0 ? -d : d);
+        finJ = inicioJ + (dy < 0 ? -d : d);
+    }
+}
+
 int main()
 {
     // Ventana y OpenGL
@@ -262,11 +286,21 @@ int main()
     int ultimaI = -1, ultimaJ = -1;
     bool dibujando = false;
 
-    // Herramienta activa: 0 = pincel, 1 = borrador, 2 = relleno
-    int herramienta = 0;
-
     // Color con el que se pinta ahora (el que se elige en el panel)
     float colorActual[3] = { 0.3f, 0.5f, 1.0f };
+
+    // Herramienta activa: 0 = pincel, 1 = borrador, 2 = relleno, 3 = linea
+    int herramienta = 0;
+
+    // Orientacion de la linea: 0 = libre, 1 = horizontal, 2 = vertical, 3 = diagonal
+    int orientacion = 0;
+
+    // Celdas de la vista previa de la linea (se marcan mientras arrastras)
+    std::vector<int> vistaPrevia(N * N, 0);
+
+    // Celda donde empezo la linea y si hay una linea en curso
+    int inicioI = -1, inicioJ = -1;
+    bool hayLinea = false;
 
     // Loop principal
     while (!glfwWindowShouldClose(window))
@@ -292,6 +326,14 @@ int main()
         ImGui::RadioButton("Pincel", &herramienta, 0);
         ImGui::RadioButton("Borrador", &herramienta, 1);
         ImGui::RadioButton("Relleno", &herramienta, 2);
+        ImGui::RadioButton("Linea", &herramienta, 3);
+
+        // El selector de orientacion solo aparece con la herramienta de linea
+        if (herramienta == 3)
+        {
+            const char* orientaciones[] = { "Libre", "Horizontal", "Vertical", "Diagonal 45" };
+            ImGui::Combo("Orientacion", &orientacion, orientaciones, 4);
+        }
 
         // Si se presiona, todas las celdas quedan vacias
         if (ImGui::Button("Borrar todo"))
@@ -332,10 +374,34 @@ int main()
 
             if (i >= 0 && i < N && j >= 0 && j < N)
             {
-                if (herramienta == 2)
+                if (herramienta == 3)
                 {
-                    // Relleno: solo actua en el primer instante del clic,
-                    // no se repite mientras mantienes el boton presionado
+                    // Linea: el primer instante del clic fija el inicio
+                    if (!dibujando)
+                    {
+                        inicioI = i;
+                        inicioJ = j;
+                    }
+
+                    // Celda final segun donde esta el mouse y la orientacion elegida
+                    int finI = i;
+                    int finJ = j;
+                    ajustarOrientacion(inicioI, inicioJ, finI, finJ, orientacion);
+
+                    // Vista previa: se borra la anterior y se marca el camino nuevo con Bresenham
+                    std::fill(vistaPrevia.begin(), vistaPrevia.end(), 0);
+                    std::vector<std::pair<int, int>> camino = bresenhamLine(inicioI, inicioJ, finI, finJ);
+                    for (auto& c : camino)
+                    {
+                        vistaPrevia[c.second * N + c.first] = 1;
+                    }
+
+                    hayLinea = true;
+                    cambio = true;
+                }
+                else if (herramienta == 2)
+                {
+                    // Relleno: solo actua en el primer instante del clic
                     if (!dibujando)
                     {
                         rellenar(celdas, colores, N, i, j, colorActual);
@@ -366,6 +432,26 @@ int main()
         }
         else
         {
+            // Si habia una linea en curso, al soltar el clic se pinta de verdad
+            if (dibujando && herramienta == 3 && hayLinea)
+            {
+                for (int k = 0; k < N * N; k++)
+                {
+                    if (vistaPrevia[k] == 1)
+                    {
+                        celdas[k] = 1;
+                        colores[k * 3 + 0] = colorActual[0];
+                        colores[k * 3 + 1] = colorActual[1];
+                        colores[k * 3 + 2] = colorActual[2];
+                    }
+                }
+
+                // La vista previa ya cumplio su trabajo
+                std::fill(vistaPrevia.begin(), vistaPrevia.end(), 0);
+                hayLinea = false;
+                cambio = true;
+            }
+
             // Sin clic, el trazo termino
             dibujando = false;
         }
@@ -379,12 +465,16 @@ int main()
             {
                 for (int i = 0; i < N; i++)
                 {
-                    if (celdas[j * N + i] == 0) continue;
+                    int k = j * N + i;
 
-                    // Color de esta celda
-                    float r = colores[(j * N + i) * 3 + 0];
-                    float g = colores[(j * N + i) * 3 + 1];
-                    float b = colores[(j * N + i) * 3 + 2];
+                    // Una celda se dibuja si esta pintada o si es parte de la vista previa
+                    bool enVista = (vistaPrevia[k] == 1);
+                    if (celdas[k] == 0 && !enVista) continue;
+
+                    // La vista previa usa el color elegido, las demas su propio color
+                    float r = enVista ? colorActual[0] : colores[k * 3 + 0];
+                    float g = enVista ? colorActual[1] : colores[k * 3 + 1];
+                    float b = enVista ? colorActual[2] : colores[k * 3 + 2];
 
                     // Esquinas de la celda, con la misma formula de la grilla
                     float x0c = -1.0f + i * step;
