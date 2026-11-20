@@ -179,6 +179,112 @@ void ajustarOrientacion(int inicioI, int inicioJ, int& finI, int& finJ, int orie
     }
 }
 
+// Algoritmo del punto medio para circulos, con parametro de decision.
+// Recibe el centro (xc, yc) y el radio r, y devuelve las celdas del contorno
+std::vector<std::pair<int, int>> bresenhamCircle(int xc, int yc, int r)
+{
+    std::vector<std::pair<int, int>> puntos;
+
+    // Solo se calcula un octavo del circulo, los otros siete salen por simetria
+    int x = 0;
+    int y = r;
+    int p = 1 - r; // parametro de decision inicial
+
+    // Dado un punto (x, y) del primer octavo, agrega sus 8 puntos simetricos
+    auto plotPoints = [&](int x, int y)
+    {
+        puntos.push_back({ xc + x, yc + y });
+        puntos.push_back({ xc - x, yc + y });
+        puntos.push_back({ xc + x, yc - y });
+        puntos.push_back({ xc - x, yc - y });
+        puntos.push_back({ xc + y, yc + x });
+        puntos.push_back({ xc - y, yc + x });
+        puntos.push_back({ xc + y, yc - x });
+        puntos.push_back({ xc - y, yc - x });
+    };
+
+    plotPoints(x, y);
+
+    while (x < y)
+    {
+        x++;
+        if (p < 0)
+        {
+            p += 2 * x + 1;
+        }
+        else
+        {
+            y--;
+            p += 2 * (x - y) + 1;
+        }
+        plotPoints(x, y);
+    }
+
+    return puntos;
+}
+
+// Calcula las celdas de una figura entre la celda donde empezo el clic y la del mouse.
+// 3 = linea, 4 = circulo, 5 = cuadrado, 6 = triangulo
+std::vector<std::pair<int, int>> calcularFigura(int herramienta, int inicioI, int inicioJ, int mouseI, int mouseJ, int orientacion, int N)
+{
+    std::vector<std::pair<int, int>> figura;
+
+    int dx = mouseI - inicioI;
+    int dy = mouseJ - inicioJ;
+
+    // Agrega a la figura las celdas de una recta entre dos celdas
+    auto agregarRecta = [&](int ax, int ay, int bx, int by)
+    {
+        std::vector<std::pair<int, int>> recta = bresenhamLine(ax, ay, bx, by);
+        figura.insert(figura.end(), recta.begin(), recta.end());
+    };
+
+    if (herramienta == 3)
+    {
+        // Linea: la celda final se ajusta segun la orientacion elegida
+        int finI = mouseI;
+        int finJ = mouseJ;
+        ajustarOrientacion(inicioI, inicioJ, finI, finJ, orientacion);
+        agregarRecta(inicioI, inicioJ, finI, finJ);
+    }
+    else if (herramienta == 4)
+    {
+        // Circulo: el centro es el inicio y el radio es la distancia hasta el mouse
+        int r = (int)std::lround(std::sqrt((double)(dx * dx + dy * dy)));
+        figura = bresenhamCircle(inicioI, inicioJ, r);
+    }
+    else if (herramienta == 5)
+    {
+        // Cuadrado: se usa el lado menor para que quede cuadrado y dentro de la grilla
+        int lado = std::min(std::abs(dx), std::abs(dy));
+        int x1 = inicioI + (dx < 0 ? -lado : lado);
+        int y1 = inicioJ + (dy < 0 ? -lado : lado);
+
+        agregarRecta(inicioI, inicioJ, x1, inicioJ);  // lado de abajo
+        agregarRecta(x1, inicioJ, x1, y1);            // lado derecho
+        agregarRecta(x1, y1, inicioI, y1);            // lado de arriba
+        agregarRecta(inicioI, y1, inicioI, inicioJ);  // lado izquierdo
+    }
+    else if (herramienta == 6)
+    {
+        // Triangulo: base en la fila del clic y punta en la fila del mouse, en el centro
+        int xm = (inicioI + mouseI) / 2;
+
+        agregarRecta(inicioI, inicioJ, mouseI, inicioJ);  // base
+        agregarRecta(inicioI, inicioJ, xm, mouseJ);       // lado izquierdo
+        agregarRecta(mouseI, inicioJ, xm, mouseJ);        // lado derecho
+    }
+
+    // Se descartan las celdas fuera de la grilla (el circulo se puede salir)
+    std::vector<std::pair<int, int>> dentro;
+    for (auto& c : figura)
+    {
+        if (c.first >= 0 && c.first < N && c.second >= 0 && c.second < N)
+            dentro.push_back(c);
+    }
+    return dentro;
+}
+
 int main()
 {
     // Ventana y OpenGL
@@ -289,16 +395,17 @@ int main()
     // Color con el que se pinta ahora (el que se elige en el panel)
     float colorActual[3] = { 0.3f, 0.5f, 1.0f };
 
-    // Herramienta activa: 0 = pincel, 1 = borrador, 2 = relleno, 3 = linea
+    // Herramienta activa: 0 = pincel, 1 = borrador, 2 = relleno, 3 = linea,
+    // 4 = circulo, 5 = cuadrado, 6 = triangulo
     int herramienta = 0;
 
     // Orientacion de la linea: 0 = libre, 1 = horizontal, 2 = vertical, 3 = diagonal
     int orientacion = 0;
 
-    // Celdas de la vista previa de la linea (se marcan mientras arrastras)
+    // Celdas de la vista previa de la figura (se marcan mientras arrastras)
     std::vector<int> vistaPrevia(N * N, 0);
 
-    // Celda donde empezo la linea y si hay una linea en curso
+    // Celda donde empezo la figura y si hay una figura en curso
     int inicioI = -1, inicioJ = -1;
     bool hayLinea = false;
 
@@ -316,8 +423,8 @@ int main()
         // true si hay que reconstruir los cuadritos
         bool cambio = false;
 
-        // Panel de controles
-        ImGui::Begin("Panel");
+        // Panel de controles: se ajusta solo al tamano de lo que tiene adentro
+        ImGui::Begin("Panel", nullptr, ImGuiWindowFlags_AlwaysAutoResize);
 
         // Selector de color: al elegir uno, las celdas nuevas se pintan con ese color
         ImGui::ColorEdit3("Color", colorActual);
@@ -327,6 +434,9 @@ int main()
         ImGui::RadioButton("Borrador", &herramienta, 1);
         ImGui::RadioButton("Relleno", &herramienta, 2);
         ImGui::RadioButton("Linea", &herramienta, 3);
+        ImGui::RadioButton("Circulo", &herramienta, 4);
+        ImGui::RadioButton("Cuadrado", &herramienta, 5);
+        ImGui::RadioButton("Triangulo", &herramienta, 6);
 
         // El selector de orientacion solo aparece con la herramienta de linea
         if (herramienta == 3)
@@ -374,24 +484,19 @@ int main()
 
             if (i >= 0 && i < N && j >= 0 && j < N)
             {
-                if (herramienta == 3)
+                if (herramienta >= 3)
                 {
-                    // Linea: el primer instante del clic fija el inicio
+                    // Linea, circulo, cuadrado y triangulo: el primer instante del clic fija el inicio
                     if (!dibujando)
                     {
                         inicioI = i;
                         inicioJ = j;
                     }
 
-                    // Celda final segun donde esta el mouse y la orientacion elegida
-                    int finI = i;
-                    int finJ = j;
-                    ajustarOrientacion(inicioI, inicioJ, finI, finJ, orientacion);
-
-                    // Vista previa: se borra la anterior y se marca el camino nuevo con Bresenham
+                    // Vista previa: se borra la anterior y se marca la figura nueva
                     std::fill(vistaPrevia.begin(), vistaPrevia.end(), 0);
-                    std::vector<std::pair<int, int>> camino = bresenhamLine(inicioI, inicioJ, finI, finJ);
-                    for (auto& c : camino)
+                    std::vector<std::pair<int, int>> figura = calcularFigura(herramienta, inicioI, inicioJ, i, j, orientacion, N);
+                    for (auto& c : figura)
                     {
                         vistaPrevia[c.second * N + c.first] = 1;
                     }
@@ -432,8 +537,8 @@ int main()
         }
         else
         {
-            // Si habia una linea en curso, al soltar el clic se pinta de verdad
-            if (dibujando && herramienta == 3 && hayLinea)
+            // Si habia una figura en curso, al soltar el clic se pinta de verdad
+            if (dibujando && herramienta >= 3 && hayLinea)
             {
                 for (int k = 0; k < N * N; k++)
                 {
