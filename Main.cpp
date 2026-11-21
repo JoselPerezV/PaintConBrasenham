@@ -285,6 +285,80 @@ std::vector<std::pair<int, int>> calcularFigura(int herramienta, int inicioI, in
     return dentro;
 }
 
+
+// Aplica mover, girar y escalar a todo lo pintado.
+// Girar y escalar se hacen alrededor del centro del dibujo
+void transformarDibujo(std::vector<int>& celdas, std::vector<float>& colores, int N, int tx, int ty, float anguloGrados, float escala)
+{
+    // Caja que rodea al dibujo: la celda pintada mas a la izquierda, derecha, abajo y arriba
+    int minI = N, maxI = -1, minJ = N, maxJ = -1;
+    for (int j = 0; j < N; j++)
+    {
+        for (int i = 0; i < N; i++)
+        {
+            if (celdas[j * N + i] == 1)
+            {
+                minI = std::min(minI, i);
+                maxI = std::max(maxI, i);
+                minJ = std::min(minJ, j);
+                maxJ = std::max(maxJ, j);
+            }
+        }
+    }
+
+    // Si no hay nada pintado, no hay nada que transformar
+    if (maxI < 0) return;
+
+    // Centro del dibujo
+    float cx = (minI + maxI + 1) / 2.0f;
+    float cy = (minJ + maxJ + 1) / 2.0f;
+
+    float a = anguloGrados * 3.14159265f / 180.0f;
+    float c = std::cos(a);
+    float s = std::sin(a);
+
+    std::vector<int> nuevasCeldas(N * N, 0);
+    std::vector<float> nuevosColores(N * N * 3, 0.0f);
+
+    // Se recorre cada celda del resultado y se busca de donde viene.
+    // Asi no quedan huecos al girar o agrandar
+    for (int j = 0; j < N; j++)
+    {
+        for (int i = 0; i < N; i++)
+        {
+            // Centro de la celda de destino, medido desde el centro del dibujo y sin el movimiento
+            float px = i + 0.5f - cx - tx;
+            float py = j + 0.5f - cy - ty;
+
+            // Se deshace el giro y la escala para encontrar la celda de origen
+            float ox = (c * px + s * py) / escala + cx;
+            float oy = (-s * px + c * py) / escala + cy;
+
+            int oi = (int)std::floor(ox + 0.0001f);
+            int oj = (int)std::floor(oy + 0.0001f);
+
+            // Si el origen cae fuera de la grilla, la celda queda vacia
+            if (oi < 0 || oi >= N || oj < 0 || oj >= N) continue;
+
+            int origen = oj * N + oi;
+            int destino = j * N + i;
+
+            // Si la celda de origen estaba pintada, la de destino se pinta del mismo color
+            if (celdas[origen] == 1)
+            {
+                nuevasCeldas[destino] = 1;
+                nuevosColores[destino * 3 + 0] = colores[origen * 3 + 0];
+                nuevosColores[destino * 3 + 1] = colores[origen * 3 + 1];
+                nuevosColores[destino * 3 + 2] = colores[origen * 3 + 2];
+            }
+        }
+    }
+
+    celdas = nuevasCeldas;
+    colores = nuevosColores;
+}
+
+
 int main()
 {
     // Ventana y OpenGL
@@ -409,6 +483,11 @@ int main()
     int inicioI = -1, inicioJ = -1;
     bool hayLinea = false;
 
+    //Valores de los controles de transformacion
+    int tx = 0, ty = 0;
+    float angulo = 0.0f;
+    float escala = 1.0f;
+
     // Loop principal
     while (!glfwWindowShouldClose(window))
     {
@@ -450,6 +529,30 @@ int main()
         {
             std::fill(celdas.begin(), celdas.end(), 0);
             cambio = true;
+        }
+
+        ImGui::Separator();
+        ImGui::Text("Transformaciones");
+
+        // Controles: mover en x y en y, girar en grados y escalar
+        ImGui::SliderInt("Mover X", &tx, -N, N);
+        ImGui::SliderInt("Mover Y", &ty, -N, N);
+        ImGui::SliderFloat("Angulo", &angulo, -180.0f, 180.0f);
+        ImGui::SliderFloat("Escala", &escala, 0.25f, 3.0f);
+
+        // Aplica los valores al dibujo y deja los controles en su valor inicial
+        if (ImGui::Button("Aplicar"))
+        {
+            transformarDibujo(celdas, colores, N, tx, ty, angulo, escala);
+            tx = 0; ty = 0; angulo = 0.0f; escala = 1.0f;
+            cambio = true;
+        }
+
+        // Deja los controles en su valor inicial sin tocar el dibujo
+        ImGui::SameLine();
+        if (ImGui::Button("Restablecer"))
+        {
+            tx = 0; ty = 0; angulo = 0.0f; escala = 1.0f;
         }
 
         ImGui::End();
