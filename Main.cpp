@@ -483,6 +483,7 @@ int main()
     int inicioI = -1, inicioJ = -1;
     bool hayLinea = false;
 
+
     //Valores de los controles de transformacion
     int tx = 0, ty = 0;
     float angulo = 0.0f;

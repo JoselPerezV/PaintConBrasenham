@@ -4,7 +4,7 @@ Programa de dibujo (paint) sobre una grilla de celdas, hecho en C++ con OpenGL p
 
 - **Autor:** Jose Luis Perez Vera
 - **Curso:** Introducción a la Computación Gráfica, grupo MULB (11:00 a 2:00)
-- **Video explicativo y demostración:** [enlace al video]
+- **Video explicativo y demostración:https://drive.google.com/file/d/1vQvvP0mu2uwNJWfS-G6t_3nS1d9_C9o8/view?usp=sharing
 
 ## Qué hace
 
