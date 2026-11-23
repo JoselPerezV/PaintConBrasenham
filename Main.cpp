@@ -387,6 +387,8 @@ int main()
     ImGui_ImplOpenGL3_Init("#version 330");
 
     gladLoadGL();
+
+    // para que la grilla se expanda a toda la pantalla si se maximisa la ventana
     glViewport(0, 0, 800, 800);
 
 
