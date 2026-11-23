@@ -359,6 +359,7 @@ void transformarDibujo(std::vector<int>& celdas, std::vector<float>& colores, in
 }
 
 
+//funcion main
 int main()
 {
     // Ventana y OpenGL
