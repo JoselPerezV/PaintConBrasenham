@@ -378,6 +378,7 @@ int main()
     glfwMakeContextCurrent(window);
     glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
 
+    //_______________________________________________________________________________________
     // ImGui
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
@@ -388,6 +389,8 @@ int main()
     gladLoadGL();
     glViewport(0, 0, 800, 800);
 
+
+    //_______________________________________________________________________________________
     // Shaders
     GLuint vertexShader = glCreateShader(GL_VERTEX_SHADER);
     glShaderSource(vertexShader, 1, &vertexShaderSource, NULL);
@@ -408,6 +411,7 @@ int main()
     GLint colorLoc = glGetUniformLocation(shaderProgram, "uColor");
     GLint usarVerticeLoc = glGetUniformLocation(shaderProgram, "uUsarColorVertice");
 
+    //_______________________________________________________________________________________
     // Grilla: N cuadros por lado, cada uno de tamano step (la ventana va de -1 a 1)
     const int N = 20;
     float step = 2.0f / N;
@@ -448,6 +452,10 @@ int main()
     // Triangulos de las celdas pintadas. Cada vertice son 5 numeros: x, y, rojo, verde, azul
     std::vector<float> celdaVertices;
 
+
+    //_______________________________________________________________________________________
+    //Datos del paint
+    // Matrices de celdas y colores, y sus buffers
     // Buffers de las celdas (vacios por ahora, se llenan cuando se pinta algo)
     GLuint celdaVAO, celdaVBO;
     glGenVertexArrays(1, &celdaVAO);
@@ -462,6 +470,11 @@ int main()
     glEnableVertexAttribArray(1);
     glBindBuffer(GL_ARRAY_BUFFER, 0);
     glBindVertexArray(0);
+
+
+    //_______________________________________________________________________________________
+    //Datos del paint
+    // Matrices de celdas y colores, y sus buffers
 
     // Estado del trazo: ultima celda pintada y si el clic sigue presionado
     int ultimaI = -1, ultimaJ = -1;
@@ -490,6 +503,9 @@ int main()
     float angulo = 0.0f;
     float escala = 1.0f;
 
+
+    //_______________________________________________________________________________________
+    //Panel, mouse, reconstruir y dibujar, en cada frame
     // Loop principal
     while (!glfwWindowShouldClose(window))
     {
@@ -737,6 +753,8 @@ int main()
         glfwPollEvents();
     }
 
+
+    //_______________________________________________________________________________________
     // Limpieza: se libera lo que se reservo en la GPU y se cierra todo
     glDeleteVertexArrays(1, &celdaVAO);
     glDeleteBuffers(1, &celdaVBO);
